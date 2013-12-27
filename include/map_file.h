@@ -1,0 +1,23 @@
+/**********************************************************
+*     Module Name : map_file.h
+*     Description : map file declare
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+#ifndef _MAP_FILE_H
+#define _MAP_FILE_H
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include "file_access.h"
+
+extern uint8_t MapFileDestroy(FILE_HANDLE_S* pFileHandle);
+extern FILE_HANDLE_S* MapFileCreate(char* pFileName, uint64_t aFileSize);
+
+#endif

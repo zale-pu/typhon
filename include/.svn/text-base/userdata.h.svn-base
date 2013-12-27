@@ -1,0 +1,46 @@
+/*******************************************************************************
+ * @Copyright   2013-2016,      Gigadevice .Co., Ltd
+ * @file        userdata.h
+ * @brief       Header file of the User Data.
+ * @author      Qiang Pu
+ * @version     1.0
+ * @date        2013.12
+ * @warning 
+ * @history     version     author      time            record
+ *              1.0         Qiang Pu    2013.11.22      create
+ ******************************************************************************/
+#ifndef _USERDATA_H 
+#define _USERDATA_H
+
+#include <stdint.h>
+
+#define MAX_PARTITION_CNT   8
+
+/**
+ * @function    void UserData_Init(void)
+ * @brief       Initialize all partitions at once.
+ */
+extern void     UserData_Init(void);
+
+/**
+ * @function    void UserData_Term(void)
+ * @brief       Term all partitions at once.
+ */
+extern void     UserData_Term(void);
+
+/**
+ * @function    void UserData_InitPart(uint32_t aPartIndex, uint32_t aPartSize)
+ * @brief       Initialize  partition specified by aPartIndex.
+ * @param[in]   aPartIndex: Index which partition will be init.
+ * @param[in]   aPartSize: The size of this partition will be init.
+ */
+extern void     UserData_InitPart(uint32_t aPartIndex, uint32_t aPartSize);
+extern void     UserData_TermPart(uint32_t aPartIndex);
+extern void     UserData_Insert(uint32_t aPartIndex, UserDataItem_S* apMapData);
+extern uint32_t UserData_Compare(uint32_t aPartIndex, UserDataItem_S* apMapData, uint32_t aDataBuf[]);
+extern uint8_t  UserData_CheckNode(uint32_t aPartIndex, UserDataItem_S* apMapData);
+
+extern void     UserData_Store(uint32_t aPartIndex, uint32_t aAccessMode, char* apDirName);
+extern void     UserData_Load(uint32_t* aPartIndex, uint32_t* apAccessMode, char* apDirName);
+
+#endif

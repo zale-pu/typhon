@@ -1,0 +1,144 @@
+/**********************************************************
+*     Module Name : test_plan.c
+*     Description : test plan implement
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+
+#include "cmockery.h"
+#include "test_cfg.h"
+#include "test_plan.h"
+#include "test_param.h"
+
+#define MAX_SUITE_CNT 128
+
+typedef int (*suite_entry)(void);
+
+typedef struct _TEST_SUITE {
+    const char *name;
+    suite_entry entry;
+    void *handle;
+}TEST_SUITE_S;
+
+typedef struct _TEST_MODULE {
+    const char *name;
+    TEST_SUITE_S *suite_table;
+    int suite_cnt;
+}TEST_MODULE_S;
+
+uint32_t  gSuiteCnt;
+TEST_SUITE_S gSuiteTable[MAX_SUITE_CNT];
+extern int TestSuite_FileAccessModule_Test(void);
+extern int TestSuite_DataMapModule_Test(void);
+TEST_SUITE_S SuiteTable_ModuleTest[] =
+{
+    {"FileAccessModuleTest",              TestSuite_FileAccessModule_Test,},
+    {"DataMapModuleTest",              TestSuite_DataMapModule_Test,},
+};
+
+TEST_MODULE_S ModuleTable[] =
+{
+    {"ModuleTest",     SuiteTable_ModuleTest, sizeof(SuiteTable_ModuleTest)/sizeof(SuiteTable_ModuleTest[0])},
+};
+
+uint32_t execute_suite(const char *suite)
+{
+    uint32_t i, j, cnt = 0;
+    TEST_MODULE_S *m;
+    TEST_SUITE_S  *s;
+
+    filter_case_setup(NULL, 0);
+
+    for (i = 0; i < sizeof(ModuleTable)/sizeof(ModuleTable[0]); i++)
+    {
+        m = &ModuleTable[i];
+
+        for (j = 0; j < m->suite_cnt; j++)
+        {
+            s = &m->suite_table[j];
+            if (strcmp( s->name, suite ) == 0)
+            {
+                fprintf(stderr, ">>>Execute Suite(%s) Start\n", s->name);
+                cnt = s->entry();
+                fprintf(stderr, "<<<Execute Suite(%s) Done\n", s->name);
+                return cnt;
+            }
+        }
+    }
+
+    return 0;
+}
+
+uint32_t execute_cases(const uint32_t *cases, uint32_t cnt)
+{
+    uint32_t i, j, fail = 0;
+    TEST_MODULE_S *m;
+    TEST_SUITE_S  *s;
+
+    filter_case_setup(cases, cnt);
+
+    for (i = 0; i < sizeof(ModuleTable)/sizeof(ModuleTable[0]); i++)
+    {
+        m = &ModuleTable[i];
+
+        for (j = 0; j < m->suite_cnt; j++)
+        {
+            s = &m->suite_table[j];
+            fprintf(stderr, ">>>Execute Suite(%s) Start\n", s->name);
+            fail += s->entry();
+            fprintf(stderr, "<<<Execute Suite(%s) Done\n", s->name);
+        }
+    }
+
+    return fail;
+}
+
+uint32_t TestPlan(const char *cfg_file, const char *param_file)
+{
+    uint32_t    caseCnt;
+    uint32_t*   caseList;
+	uint32_t    suiteItem;
+	uint32_t    totalFailed = 0;
+
+	test_plan_init(cfg_file);
+	test_param_init(param_file);
+
+    test_stat_init();
+    fprintf(stderr, "Test Start\n");
+
+	//execute cases
+    caseList = test_plan_get_case_list();
+    caseCnt  = test_plan_get_case_cnt();
+
+	if (caseCnt != 0)
+	{
+        totalFailed = execute_cases(caseList, caseCnt);
+	}
+	else
+	{
+        //execute suites
+        for (suiteItem = 0; suiteItem < test_plan_get_suite_cnt(); suiteItem++)
+        {
+            totalFailed += execute_suite(test_plan_get_suite(suiteItem));
+        }
+	}
+
+    test_stat_report();
+
+    fflush(stderr);
+
+	return totalFailed;
+}
+

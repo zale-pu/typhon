@@ -1,0 +1,17 @@
+---
+FlashParam:
+    - BytesPerPage: 8192
+    - BytesPerSpare: 446
+    - PagesPerBlock: 256
+    - BlocksPerPlane: 2048
+    - PlanesPerChip: 2
+---
+ConnectParam:
+    - ChipsPerChannel: 8
+    - ChannelsPerArray: 32
+---
+TestParam:
+    - StressTime: 120
+    - StressLevel: 3
+    - ReplayDumpPoint: 0
+    - ReplayLogFile: ..\stress_log\TestNDStress2KAlignedFixed.log

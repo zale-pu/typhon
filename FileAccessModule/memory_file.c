@@ -1,0 +1,139 @@
+/**********************************************************
+*     Module Name : memory_file.c
+*     Description : memory file implement
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include <stdio.h>
+#include <stdint.h>
+#include <assert.h>
+#include <string.h>
+#include <stdlib.h>
+#include "file_lib.h"
+#include "memory_file.h"
+
+typedef struct _MEMFILE_INFO
+{
+	char      mFileName[64];
+	uint32_t  mFileSize;
+	FILE      *hFile;
+	void      *pBuffer;
+}MEMFILE_INFO_S;
+
+static uint8_t FileOpenByMem(FILE_HANDLE_S* pFileHandle)
+{
+	uint32_t size;
+	MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	pFileInfo->hFile = fopen(pFileInfo->mFileName, RdFlag);
+	if (pFileInfo->hFile != NULL)
+	{
+		size = fread(pFileInfo->pBuffer, 1, pFileInfo->mFileSize, pFileInfo->hFile);
+		assert (size == pFileInfo->mFileSize);
+	}
+	else
+	{
+		memset(pFileInfo->pBuffer, 0x00, pFileInfo->mFileSize);
+		pFileInfo->hFile = fopen(pFileInfo->mFileName, WrFlag);
+		assert(pFileInfo->hFile);
+	}
+
+	return SUCCESS;
+}
+
+static uint8_t FileFlushByMem(FILE_HANDLE_S* pFileHandle)
+{
+    MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    if (pFileInfo->hFile != NULL)
+    {
+        assert(pFileInfo->pBuffer);
+
+        fwrite(pFileInfo->pBuffer, 1, pFileInfo->mFileSize, pFileInfo->hFile);
+    }
+
+    return SUCCESS;
+}
+
+static uint8_t FileCloseByMem(FILE_HANDLE_S* pFileHandle)
+{
+    MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    if (pFileInfo->hFile != NULL)
+    {
+        assert(pFileInfo->pBuffer);
+
+        fwrite(pFileInfo->pBuffer, 1, pFileInfo->mFileSize, pFileInfo->hFile);
+        fclose(pFileInfo->hFile);
+    }
+
+    return SUCCESS;
+}
+
+static uint8_t FileReadByMem(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+    MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    if (pFileInfo->hFile != NULL)
+    {
+        assert (pFileInfo->pBuffer);
+
+        memcpy(pBuf, pFileInfo->pBuffer+aAddr, aSize);
+    }
+
+    return SUCCESS;
+}
+
+static uint8_t FileWriteByMem(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+    MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    if (pFileInfo->hFile != NULL)
+    {
+        assert (pFileInfo->pBuffer);
+
+        memcpy (pFileInfo->pBuffer+aAddr, pBuf, aSize);
+    }
+
+    return SUCCESS;
+}
+
+FILE_HANDLE_S* MemoryFileCreate(char* pFileName, uint32_t aFileSize)
+{
+	FILE_HANDLE_S*  pFileHandle = malloc(sizeof(FILE_HANDLE_S));
+	MEMFILE_INFO_S* pFileInfo = malloc(sizeof(MEMFILE_INFO_S));
+
+	pFileInfo->pBuffer = malloc(aFileSize);
+    memcpy(pFileInfo->mFileName, pFileName, 64);
+    pFileInfo->mFileSize = aFileSize;
+
+	pFileHandle->priv = pFileInfo;
+    pFileHandle->file_open = FileOpenByMem;
+    pFileHandle->file_read = FileReadByMem;
+    pFileHandle->file_write = FileWriteByMem;
+    pFileHandle->file_flush = FileFlushByMem;
+    pFileHandle->file_close = FileCloseByMem;
+
+	return pFileHandle;
+}
+
+uint8_t MemoryFileDestroy(FILE_HANDLE_S* pFileHandle)
+{
+    MEMFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    free(pFileInfo->pBuffer);
+    free(pFileInfo);
+    free(pFileHandle);
+
+    return SUCCESS;
+}
+

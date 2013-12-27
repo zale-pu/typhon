@@ -1,0 +1,350 @@
+/**********************************************************
+*     Module Name : map_file.c
+*     Description : map file implement
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include "map_file.h"
+#include "file_lib.h"
+
+#define   MAP_VIEW_SIZE  ((uint64_t)(64*256*8640))
+
+#if defined(linux) || defined(__linux__)
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+typedef struct _MAPFILE_INFO {
+	char     mFileName[64];
+	uint64_t mFileSize;
+    int 	 hFile;
+    void*	 pBuffer;
+	uint32_t mView;
+}MAPFILE_INFO_S;
+
+static uint8_t FileOpenByMap(FILE_HANDLE_S* pFileHandle)
+{
+	uint64_t  fileSize = 0;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    pFileInfo->mView = 0;
+	pFileInfo->hFile = open(pFileInfo->mFileName, O_RDWR|O_CREAT, S_IRWXU|S_IRWXG|S_IRWXO);
+	if (pFileInfo->hFile < 0)
+	{
+	    printf("Open File Failure\n");
+		return FAILURE;
+	}
+
+    if ((pFileInfo->mFileSize % MAP_VIEW_SIZE) == 0)
+    {
+        fileSize = pFileInfo->mFileSize;
+    }
+    else
+    {
+        fileSize = (pFileInfo->mFileSize / MAP_VIEW_SIZE + 1) * MAP_VIEW_SIZE;
+    }
+
+    lseek(pFileInfo->hFile, fileSize, SEEK_SET);
+    write(pFileInfo->hFile, "", 1);
+	pFileInfo->pBuffer = mmap(NULL, MAP_VIEW_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, pFileInfo->hFile, 0);
+
+	if (pFileInfo->pBuffer == MAP_FAILED)
+	{
+	    printf("MapViewOfFile Failure\n");
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+
+static uint8_t FileFlushByMap(FILE_HANDLE_S* pFileHandle)
+{
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	if (pFileInfo->pBuffer != MAP_FAILED)
+	{
+        if (munmap(pFileInfo->pBuffer, MAP_VIEW_SIZE) == -1)
+        {
+            printf("munmap Failure\n");
+            return FAILURE;
+        }
+	}
+
+	return SUCCESS;
+}
+
+static uint8_t FileCloseByMap(FILE_HANDLE_S* pFileHandle)
+{
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	if (pFileInfo->pBuffer != MAP_FAILED)
+	{
+        if (munmap(pFileInfo->pBuffer, MAP_VIEW_SIZE) == -1)
+        {
+            printf("munmap Failure\n");
+        }
+	}
+
+	if (pFileInfo->hFile > 0)
+	{
+		close(pFileInfo->hFile);
+		pFileInfo->hFile = -1;
+	}
+
+    return SUCCESS;
+}
+
+static uint8_t FileReadByMap(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+	uint32_t mView;
+	uint32_t offset;
+	uint64_t viewOffset;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	mView = (uint32_t)(aAddr / (uint64_t)MAP_VIEW_SIZE);
+	offset = (uint32_t)(aAddr % (uint64_t)MAP_VIEW_SIZE);
+	if (pFileInfo->mView != mView)
+	{
+		pFileInfo->mView = mView;
+        if (munmap(pFileInfo->pBuffer, MAP_VIEW_SIZE) == -1)
+        {
+            printf("munmap Failure\n");
+            return FAILURE;
+        }
+
+		viewOffset = (uint64_t)mView * (uint64_t)MAP_VIEW_SIZE;
+        pFileInfo->pBuffer = mmap(NULL, MAP_VIEW_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, pFileInfo->hFile, viewOffset);
+        if (pFileInfo->pBuffer == NULL)
+        {
+            printf("MapViewOfFile Failure\n");
+            return FAILURE;
+        }
+	}
+
+    if (pFileInfo->pBuffer != NULL)
+    {
+        memcpy(pBuf, pFileInfo->pBuffer+offset, aSize);
+    }
+
+    return SUCCESS;
+}
+
+static uint8_t FileWriteByMap(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+	uint32_t mView =0;
+	uint32_t offset =0;
+	uint64_t viewOffset;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	mView = (uint32_t)(aAddr / (uint64_t)MAP_VIEW_SIZE);
+	offset = (uint32_t)(aAddr % (uint64_t)MAP_VIEW_SIZE);
+	if (pFileInfo->mView != mView)
+	{
+		pFileInfo->mView = mView;
+        if (munmap(pFileInfo->pBuffer, MAP_VIEW_SIZE) == -1)
+        {
+            printf("munmap Failure\n");
+            return FAILURE;
+        }
+
+        viewOffset = (uint64_t)mView*(uint64_t)MAP_VIEW_SIZE;
+        pFileInfo->pBuffer = mmap(NULL, MAP_VIEW_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, pFileInfo->hFile, viewOffset);
+        if (pFileInfo->pBuffer == NULL)
+        {
+            printf("MapViewOfFile Failure\n");
+            return FAILURE;
+        }
+    }
+
+    if(pFileInfo->pBuffer != NULL)
+    {
+        memcpy(pFileInfo->pBuffer+offset, pBuf, aSize);
+    }
+
+	return SUCCESS;
+}
+
+#else
+
+#include <windef.h>
+#include <winbase.h>
+
+typedef struct _MAPFILE_INFO
+{
+	char     mFileName[64];
+	uint64_t mFileSize;
+	HANDLE   hFile;
+	HANDLE   hMap;
+	void*    pBuffer;
+	uint32_t mView;
+}MAPFILE_INFO_S;
+
+static uint8_t FileOpenByMap(FILE_HANDLE_S* pFileHandle)
+{
+	uint64_t  fileSize = 0;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	pFileInfo->mView = 0;
+	pFileInfo->hFile = CreateFile(pFileInfo->mFileName, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (pFileInfo->hFile == INVALID_HANDLE_VALUE)
+	{
+		printf("CreateFile Failure!\n");
+		return FAILURE;
+	}
+
+    if ((pFileInfo->mFileSize % MAP_VIEW_SIZE) ==0)
+    {
+        fileSize = pFileInfo->mFileSize;
+    }
+    else
+    {
+        fileSize = (pFileInfo->mFileSize / MAP_VIEW_SIZE + 1) * MAP_VIEW_SIZE;
+    }
+	pFileInfo->hMap = CreateFileMapping(pFileInfo->hFile, NULL, PAGE_READWRITE, fileSize>>32, fileSize, NULL);
+
+	if(pFileInfo->hMap == NULL)
+	{
+        printf("CreateFileMapping Failure!\n");
+		return FAILURE;
+	}
+
+    pFileInfo->pBuffer = MapViewOfFile(pFileInfo->hMap, FILE_MAP_ALL_ACCESS, 0, 0, MAP_VIEW_SIZE);
+
+	if (pFileInfo->pBuffer == NULL)
+	{
+        printf("MapViewOfFile Failure!\n");
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+
+static uint8_t FileFlushByMap(FILE_HANDLE_S* pFileHandle)
+{
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	if (pFileInfo->pBuffer != NULL)
+	{
+		FlushViewOfFile(pFileInfo->pBuffer, MAP_VIEW_SIZE);
+	}
+
+	return SUCCESS;
+}
+
+static uint8_t FileCloseByMap(FILE_HANDLE_S* pFileHandle)
+{
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	if (pFileInfo->pBuffer != NULL)
+	{
+		UnmapViewOfFile(pFileInfo->pBuffer);
+	}
+
+	if (pFileInfo->hMap != NULL)
+	{
+		CloseHandle(pFileInfo->hMap);
+		pFileInfo->hMap = NULL;
+	}
+
+	if (pFileInfo->hFile != INVALID_HANDLE_VALUE)
+	{
+		CloseHandle(pFileInfo->hFile);
+		pFileInfo->hFile = INVALID_HANDLE_VALUE;
+	}
+
+    return SUCCESS;
+}
+
+static uint8_t FileReadByMap(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+	uint32_t mView;
+	uint32_t offset;
+	uint64_t viewOffset;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	mView = aAddr / MAP_VIEW_SIZE;
+	offset = aAddr % MAP_VIEW_SIZE;
+	if (pFileInfo->mView != mView)
+	{
+		pFileInfo->mView = mView;
+		UnmapViewOfFile(pFileInfo->pBuffer);
+		viewOffset = (uint64_t)mView * (uint64_t)MAP_VIEW_SIZE;
+        pFileInfo->pBuffer = MapViewOfFile(pFileInfo->hMap, FILE_MAP_ALL_ACCESS, viewOffset>>32, viewOffset, MAP_VIEW_SIZE);
+	}
+
+    if (pFileInfo->pBuffer != NULL)
+    {
+        memcpy(pBuf, pFileInfo->pBuffer+offset, aSize);
+    }
+
+	return SUCCESS;
+}
+
+static uint8_t FileWriteByMap(FILE_HANDLE_S* pFileHandle, uint64_t aAddr, uint32_t aSize, uint8_t* pBuf)
+{
+	uint32_t mView = 0;
+	uint32_t offset = 0;
+	uint64_t viewOffset;
+	MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+	mView = (uint32_t)(aAddr / (uint64_t)MAP_VIEW_SIZE);
+	offset = (uint32_t)(aAddr % (uint64_t)MAP_VIEW_SIZE);
+	if (pFileInfo->mView != mView)
+	{
+		pFileInfo->mView = mView;
+        UnmapViewOfFile(pFileInfo->pBuffer);
+        viewOffset = (uint64_t)mView * (uint64_t)MAP_VIEW_SIZE;
+        pFileInfo->pBuffer = MapViewOfFile(pFileInfo->hMap, FILE_MAP_ALL_ACCESS, viewOffset>>32, viewOffset, MAP_VIEW_SIZE);
+    }
+
+    if (pFileInfo->pBuffer != NULL)
+    {
+        memcpy(pFileInfo->pBuffer+offset, pBuf, aSize);
+    }
+
+	return SUCCESS;
+}
+#endif
+
+FILE_HANDLE_S* MapFileCreate(char* pFileName, uint64_t aFileSize)
+{
+    FILE_HANDLE_S*  pFileHandle = malloc(sizeof(FILE_HANDLE_S));
+    MAPFILE_INFO_S* pFileInfo = malloc(sizeof(MAPFILE_INFO_S));
+
+    memcpy(pFileInfo->mFileName, pFileName, 64);
+    pFileInfo->mFileSize = aFileSize;
+
+    pFileHandle->priv = pFileInfo;
+    pFileHandle->file_open = FileOpenByMap;
+    pFileHandle->file_read = FileReadByMap;
+    pFileHandle->file_write = FileWriteByMap;
+    pFileHandle->file_flush = FileFlushByMap;
+    pFileHandle->file_close = FileCloseByMap;
+
+    return pFileHandle;
+}
+
+uint8_t MapFileDestroy(FILE_HANDLE_S* pFileHandle)
+{
+    MAPFILE_INFO_S* pFileInfo = pFileHandle->priv;
+
+    free(pFileInfo);
+    free(pFileHandle);
+
+    return SUCCESS;
+}

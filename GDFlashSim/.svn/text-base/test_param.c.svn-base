@@ -1,0 +1,76 @@
+/**********************************************************
+*     Module Name : test_param.c
+*     Description : Parse the test param
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include <stdio.h>
+#include <assert.h>
+#include <stdbool.h>
+
+#include "file_lib.h"
+#include "test_param.h"
+#include "yaml_config.h"
+
+TEST_PARAM_S     gTestParam;
+FLASH_PARAM_S    gFlashParam;
+CONNECT_PARAM_S  gConnectParam;
+
+int test_param_init(const char *param_file)
+{
+	struct CfgParser * parser;
+	struct CfgTable tableConfig;
+	struct CfgTable tableTestParam;
+	struct CfgTable tableFlashParam;
+	struct CfgTable tableConnectParam;
+
+	struct CfgItem	RootTableItems[] =
+    {
+		SETUP_TABLE_ITEM(TYPE_TABLE,    "FlashParam",     &tableFlashParam),
+		SETUP_TABLE_ITEM(TYPE_TABLE,    "ConnectParam",   &tableConnectParam),
+		SETUP_TABLE_ITEM(TYPE_TABLE,    "TestParam",      &tableTestParam),
+	};
+
+	struct CfgItem	FlashParamItems[] =
+    {
+		SETUP_TABLE_ITEM(TYPE_INT,   "BytesPerPage", 	&gFlashParam.mBytesPerPage),
+		SETUP_TABLE_ITEM(TYPE_INT,   "BytesPerSpare", 	&gFlashParam.mBytesPerSpare),
+		SETUP_TABLE_ITEM(TYPE_INT,   "PagesPerBlock", 	&gFlashParam.mPagesPerBlock),
+		SETUP_TABLE_ITEM(TYPE_INT,   "BlocksPerPlane", 	&gFlashParam.mBlocksPerPlane),
+		SETUP_TABLE_ITEM(TYPE_INT,   "PlanesPerChip",	&gFlashParam.mPlanesPerChip),
+	};
+
+	struct CfgItem	ConnectParamItems[] =
+    {
+		SETUP_TABLE_ITEM(TYPE_INT,   "ChipsPerChannel",	 &gConnectParam.mChipsPerChannel),
+		SETUP_TABLE_ITEM(TYPE_INT,   "ChannelsPerArray", &gConnectParam.mChannelsPerArray),
+	};
+
+	struct CfgItem	TestParamItems[] =
+    {
+		SETUP_TABLE_ITEM(TYPE_INT, 	   "StressTime", 	 &gTestParam.mStressTime),
+		SETUP_TABLE_ITEM(TYPE_INT, 	   "StressLevel", 	 &gTestParam.mStressLevel),
+		SETUP_TABLE_ITEM(TYPE_STRING,  "ReplayLogFile",  &gTestParam.mReplayLogFile),
+		SETUP_TABLE_ITEM(TYPE_INT,	   "ReplayDumpPoint",&gTestParam.mReplayDumpPoint),
+	};
+
+	SETUP_TABLE(tableConfig, RootTableItems);
+	SETUP_TABLE(tableTestParam, TestParamItems);
+	SETUP_TABLE(tableFlashParam, FlashParamItems);
+	SETUP_TABLE(tableConnectParam, ConnectParamItems);
+
+	parser = YamlCfgParser_Create();
+	YamlCfgParser_SetTable(parser, &tableConfig);
+	return YamlCfgParser_ParseFile(parser, param_file);
+}
+
+

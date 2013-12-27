@@ -1,0 +1,70 @@
+CUR_PATH := $(shell pwd)
+PARENT_PATH := $(shell cd $(dir $(CUR_PATH)) && pwd)
+GRANDPA_PATH := $(shell cd $(dir $(PARENT_PATH)) && pwd)
+
+ifndef INC_PATH
+	INC_PATH := -I$(PARENT_PATH)/include
+	# INC_PATH := -I$(PARENT_PATH)/include, -I$(GRANDPA_PATH)/include
+endif
+
+# PRJ_PATH = $(PARENT_PATH)
+ifndef PRJ_PATH
+	PRJ_PATH := $(CUR_PATH)/prj
+endif
+
+ifndef SO_PATH
+	SO_PATH := $(PRJ_PATH)/lib
+endif
+
+ifndef OBJ_PATH
+	OBJ_PATH := $(PRJ_PATH)/obj
+endif
+
+DIR_NAME := $(notdir $(CUR_PATH))
+OBJ_DIR := $(OBJ_PATH)/$(DIR_NAME)
+
+CC = gcc
+RM = -rm -rf
+MKDIR = -mkdir -p
+CFLAGS := -g -Wall
+SOCFLAGS += -fPIC --shared
+PARAM ?= 
+
+C_LIB := $(shell ls | grep \.c$)
+OBJ_LIB := $(addsuffix .o, $(basename $(C_LIB)))
+SO_LIB = $(addsuffix .so, $(addprefix lib, $(DIR_NAME)))
+
+
+.PHONY : all
+all : so
+
+.PHONY : so
+so : $(SO_LIB)
+$(SO_LIB) : $(OBJ_LIB)
+	$(MKDIR) $(SO_PATH)
+	cd $(OBJ_DIR) && \
+		$(CC) -o $(SO_PATH)/$@ $^ $(PARAM) $(CFLAGS) $(SOCFLAGS)
+
+.PHONY: obj
+obj : $(OBJ_LIB)
+$(OBJ_LIB) : %.o : %.c
+	$(MKDIR) $(OBJ_DIR)
+	$(CC) -o $(OBJ_DIR)/$@ -c $< $(CFLAGS) $(INC_PATH) $(PARAM)
+
+.PHONY : clean
+clean :
+	$(RM) $(OBJ_DIR) $(SO_PATH)/$(SO_LIB) 
+
+.PHONY : rmall
+rmall :
+	$(RM) $(PRJ_PATH)
+
+.PHONY : check
+check :
+	@echo "**CUR_PATH**" $(CUR_PATH)
+	@echo "**PARENT_PATH**" $(PARENT_PATH)
+	@echo "**GRANDPA_PATH**" $(GRANDPA_PATH)
+	@echo "**INC_PATH**" $(INC_PATH)
+	@echo "**src files**" $(C_LIB)
+	@echo "**obj files**" $(OBJ_LIB)
+	@echo "**so  files**" $(SO_LIB)

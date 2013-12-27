@@ -1,0 +1,165 @@
+/**********************************************************
+*     Module Name : test_cfg.c
+*     Description : Parse the test config
+**********************************************************/
+
+/*********************************************************
+*     Kaifeng Zhuang @ 2013.08.01
+*     Description  : Initial create
+**********************************************************/
+
+/*********************************************************
+*  Include section
+*  Add all #includes here
+*
+**********************************************************/
+#include <stdint.h>
+#include <assert.h>
+
+#include "yaml.h"
+#include "test_cfg.h"
+#include "file_lib.h"
+
+#define MAX_CASE_CNT (64*128)
+typedef unsigned int (* StateMachine_t)(const yaml_event_t *pevent);
+
+static uint32_t suite_cnt = 0;
+static uint32_t case_cnt = 0;
+static char suites[64][128];
+static uint32_t cases[64*128];
+
+static StateMachine_t NextState;
+
+static uint32_t StateInit(const yaml_event_t *pevent);
+static uint32_t StateTestSuites(const yaml_event_t *pevent);
+static uint32_t StateTestCases(const yaml_event_t *pevent);
+static void process_test_cfg(yaml_parser_t *parser, StateMachine_t init);
+
+uint32_t test_plan_get_suite_cnt(void)
+{
+    return suite_cnt;
+}
+
+char* test_plan_get_suite(uint32_t index)
+{
+    if (index < suite_cnt)
+    {
+        return suites[index];
+    }
+
+    return NULL;
+}
+
+uint32_t test_plan_get_case_cnt(void)
+{
+    return case_cnt;
+}
+
+uint32_t* test_plan_get_case_list(void)
+{
+    return cases;
+}
+
+int test_plan_init(const char *cfg_file)
+{
+    yaml_parser_t parser;
+
+    FILE *source = fopen(cfg_file, RdFlag);
+	assert(source != NULL);
+
+    yaml_parser_initialize(&parser);
+    yaml_parser_set_input_file(&parser, source);
+    process_test_cfg(&parser, StateInit);
+    yaml_parser_delete(&parser);
+
+    fclose(source);
+
+    return(0);
+}
+
+uint32_t StateInit(const yaml_event_t *pevent)
+{
+    if (pevent->type == YAML_SCALAR_EVENT)
+    {
+        if (strcmp((char*)pevent->data.scalar.value, "TestSuites") == 0)
+        {
+            NextState = StateTestSuites;
+            return 0;
+        }
+
+        if (strcmp((char*)pevent->data.scalar.value, "TestCases") == 0)
+        {
+            NextState = StateTestCases;
+            return 0;
+        }
+
+
+        if (strcmp((char*)pevent->data.scalar.value, "") != 0)
+        {
+            printf("\nError Evnet Data:%s", (char*)pevent->data.scalar.value);
+            assert(0);
+        }
+
+        return 0;
+    }
+
+    return 0;
+}
+
+static int CheckStateExit(const yaml_event_t *pevent)
+{
+    if (pevent->type == YAML_DOCUMENT_END_EVENT || pevent->type == YAML_STREAM_END_EVENT)
+    {
+        NextState = StateInit;
+        return 1;
+    }
+
+    return 0;
+}
+
+static uint32_t StateTestSuites(const yaml_event_t *pevent)
+{
+    if (pevent->type == YAML_SCALAR_EVENT)
+    {
+        if (*(char*)pevent->data.scalar.value != '\0')
+        {
+            strcpy(suites[suite_cnt], (char*)pevent->data.scalar.value);
+            suite_cnt++;
+        }
+    }
+
+    CheckStateExit(pevent);
+    return 0;
+}
+
+static uint32_t StateTestCases(const yaml_event_t *pevent)
+{
+    if (pevent->type == YAML_SCALAR_EVENT)
+    {
+        uint32_t module, suite, caseid;
+        if (sscanf((char*)pevent->data.scalar.value, "%04d_%04d_%04d", &module, &suite, &caseid) == 3)
+        {
+            cases[case_cnt] = (module*1000 + suite)*10000 + caseid;
+            case_cnt++;
+        }
+    }
+    CheckStateExit(pevent);
+    return 0;
+}
+
+void process_test_cfg(yaml_parser_t *parser, StateMachine_t init)
+{
+    yaml_event_t event;
+    NextState = init;
+
+    while (1)
+	{
+        yaml_parser_parse(parser, &event);
+
+        if(event.type == YAML_STREAM_END_EVENT)
+            break;
+        NextState(&event);
+
+        yaml_event_delete(&event);
+    }
+}

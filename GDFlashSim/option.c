@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <sys/stat.h>
+
+enum {
+	MAJOR_VERSION = 1,
+	MINOR_VERSION = 0,
+};
+
+#if defined(linux) || defined(__linux__)
+const char *test_config_file = "./test_config.yaml";
+const char *test_param_file = "./test_param.yaml";
+#else
+const char *test_config_file = "..\\..\\..\\src\\GDFlashSim\\test_config.yaml";
+const char *test_param_file = "..\\..\\..\\src\\GDFlashSim\\test_param.yaml";
+#endif
+
+
+static void version(const char *name)
+{
+    printf("\n%s \n - GigaDevice GDFlashSim Platform %d.%2d(%s,%s)\n", name, MAJOR_VERSION, MINOR_VERSION, __DATE__, __TIME__);
+}
+
+static void help(const char * name)
+{
+    version(name);
+    printf("Usage: %s [-option]\n"\
+           " -t  Test Suites Config File\n"\
+		   " -p  Test Parameter File\n"\
+           " -v  version\n"
+
+           ,name);
+}
+
+int option_init(int argc, const char * argv[])
+{
+    char c;
+
+    while ((c = getopt (argc, (char * const *)argv, "p:t:vh?")) != -1)
+        switch (c)
+        {
+        case 't':
+            test_config_file = (const char *)optarg;
+            break;
+        case 'p':
+            test_param_file = (const char *)optarg;
+            break;
+        case 'v':
+            version(argv[0]);
+            return 1;
+        case '?':
+        case 'h':
+            help (argv[0]);
+            return 1;
+        }
+
+    version(argv[0]);
+    return 0;
+}
